@@ -19,9 +19,6 @@ public class PiPManager<Content: View>: NSObject, ObservableObject, AVPictureInP
     /// Callback invoked when user requests to restore the app from PiP
     public var onRestoreRequested: (() -> Void)?
     
-    /// Indicates whether the manager is currently handling PiP restore animation
-    public private(set) var isRestoringFromPiP: Bool = false
-    
     // MARK: - Private Properties
     
     private var pipController: AVPictureInPictureController?
@@ -132,7 +129,6 @@ public class PiPManager<Content: View>: NSObject, ObservableObject, AVPictureInP
     /// Call this method to deactivate PiP mode and return to normal display.
     public func stopPictureInPicture() {
         // If currently handling restore animation, don't interrupt it
-        guard !isRestoringFromPiP else { return }
         pipController?.stopPictureInPicture()
     }
     
@@ -163,7 +159,6 @@ public class PiPManager<Content: View>: NSObject, ObservableObject, AVPictureInP
         
         completion(true)
         pendingRestoreCompletion = nil
-        isRestoringFromPiP = false
     }
     
     // MARK: - Private Methods
@@ -223,7 +218,6 @@ public class PiPManager<Content: View>: NSObject, ObservableObject, AVPictureInP
         // then complete when new anchor is ready
         print("SwiftPiPKit: User requested restore from PiP")
         pendingRestoreCompletion = completionHandler
-        isRestoringFromPiP = true
         onRestoreRequested?()
     }
     
