@@ -37,8 +37,8 @@ public extension View {
     ///     view.backgroundColor = .clear
     /// }
     /// ```
-    func attachToPiP<Content: View>(
-        _ manager: PiPManager<Content>,
+    func attachToPiP(
+        _ manager: PiPManager,
         size: CGSize? = nil,
         configure: ((UIView) -> Void)? = nil
     ) -> some View {
@@ -92,8 +92,8 @@ public extension View {
     /// DetailView()
     ///     .updatePiPAnchor(pipManager, size: CGSize(width: 2, height: 2))
     /// ```
-    func updatePiPAnchor<Content: View>(
-        _ manager: PiPManager<Content>,
+    func updatePiPAnchor(
+        _ manager: PiPManager,
         size: CGSize? = nil,
         configure: ((UIView) -> Void)? = nil
     ) -> some View {

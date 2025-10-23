@@ -48,6 +48,9 @@ public struct PiPAnchorView: UIViewRepresentable {
         return view
     }
     
-    public func updateUIView(_ uiView: UIView, context: Context) {}
+    public func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            onViewReady(uiView)
+        }
+    }
 }
-

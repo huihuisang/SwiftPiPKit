@@ -5,9 +5,9 @@ import UIKit
 ///
 /// This class conforms to AVPictureInPictureVideoCallViewController requirements
 /// and embeds a UIHostingController containing the SwiftUI content.
+/// Supports dynamic content replacement without recreating the PiP controller.
 final class PiPVideoCallContainerViewController: AVPictureInPictureVideoCallViewController {
-    
-    private let embeddedController: UIViewController
+    private var embeddedController: UIViewController
     
     /// Creates a new container with an embedded view controller
     ///
@@ -24,21 +24,47 @@ final class PiPVideoCallContainerViewController: AVPictureInPictureVideoCallView
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = .clear
+        embedViewController(embeddedController)
+    }
+    
+    /// Replaces the current embedded content with a new view controller
+    ///
+    /// This allows dynamic content switching while PiP is active.
+    /// The transition is seamless without interrupting the PiP session.
+    ///
+    /// - Parameter newController: The new view controller to embed
+    func replaceContent(with newController: UIViewController) {
+        // Remove old controller
+        embeddedController.willMove(toParent: nil)
+        embeddedController.view.removeFromSuperview()
+        embeddedController.removeFromParent()
         
-        // Embed the content view controller
-        addChild(embeddedController)
-        embeddedController.view.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(embeddedController.view)
+        // Embed new controller
+        embeddedController = newController
+        
+        // Only embed if view is loaded
+        if isViewLoaded {
+            embedViewController(newController)
+        }
+    }
+    
+    // MARK: - Private Methods
+    
+    private func embedViewController(_ controller: UIViewController) {
+        addChild(controller)
+        controller.view.translatesAutoresizingMaskIntoConstraints = false
+        controller.view.backgroundColor = .clear
+        view.addSubview(controller.view)
         
         // Pin to all edges
         NSLayoutConstraint.activate([
-            embeddedController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            embeddedController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            embeddedController.view.topAnchor.constraint(equalTo: view.topAnchor),
-            embeddedController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            controller.view.topAnchor.constraint(equalTo: view.topAnchor),
+            controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         
-        embeddedController.didMove(toParent: self)
+        controller.didMove(toParent: self)
     }
 }
-
