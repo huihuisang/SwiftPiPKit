@@ -28,6 +28,7 @@ public class PiPManager: NSObject, ObservableObject, AVPictureInPictureControlle
     private var pipController: AVPictureInPictureController?
     private weak var activeSourceView: UIView?
     private weak var persistentAnchorView: UIView?
+    private var automaticallyFromInline: Bool
     private var videoCallController: PiPVideoCallContainerViewController?
     private var contentBuilder: (() -> AnyView)?
     
@@ -48,6 +49,15 @@ public class PiPManager: NSObject, ObservableObject, AVPictureInPictureControlle
     /// ```
     override public init() {
         self.contentBuilder = nil
+        self.automaticallyFromInline = true
+        super.init()
+        setupAudioSession()
+        checkPiPSupport()
+    }
+    
+    public init(automaticallyFromInline: Bool = true) {
+        self.contentBuilder = nil
+        self.automaticallyFromInline = automaticallyFromInline
         super.init()
         setupAudioSession()
         checkPiPSupport()
@@ -63,8 +73,9 @@ public class PiPManager: NSObject, ObservableObject, AVPictureInPictureControlle
     ///     MyCustomPiPView(data: myData)
     /// }
     /// ```
-    public init(@ViewBuilder content: @escaping () -> some View) {
+    public init(automaticallyFromInline: Bool = true, @ViewBuilder content: @escaping () -> some View) {
         self.contentBuilder = { AnyView(content()) }
+        self.automaticallyFromInline = automaticallyFromInline
         super.init()
         setupAudioSession()
         checkPiPSupport()
@@ -290,7 +301,7 @@ public class PiPManager: NSObject, ObservableObject, AVPictureInPictureControlle
             
             let controller = AVPictureInPictureController(contentSource: contentSource)
             controller.delegate = self
-            controller.canStartPictureInPictureAutomaticallyFromInline = true
+            controller.canStartPictureInPictureAutomaticallyFromInline = automaticallyFromInline
             
             pipController = controller
             print("SwiftPiPKit: ✅ PiP controller created with ContentSource")
