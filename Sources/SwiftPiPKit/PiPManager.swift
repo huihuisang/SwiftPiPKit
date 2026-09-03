@@ -35,6 +35,21 @@ public class PiPManager: NSObject, ObservableObject, AVPictureInPictureControlle
     // Hold completion to run after destination anchor is ready
     private var pendingRestoreCompletion: ((Bool) -> Void)?
     
+    /// Source view waiting to join a window, held weakly so a discarded view ends the wait
+    /// Readable inside the module so tests can assert the wait terminates
+    private(set) weak var pendingSourceView: UIView?
+    private(set) var pendingAttachAttempts = 0
+    private(set) var isAttachRetryScheduled = false
+    
+    // MARK: - Retry Tunables
+    
+    /// Attach retries are bounded: a view that never joins a window must not keep the main queue busy
+    static let maxAttachAttempts = 30
+    static let attachRetryInterval: TimeInterval = 0.1
+    /// Start retries are bounded too: PiP stays impossible while backgrounded or off screen
+    static let maxStartAttempts = 10
+    static let startRetryInterval: TimeInterval = 0.5
+    
     // MARK: - Initialization
     
     /// Creates a new PiP Manager without default content
@@ -110,13 +125,34 @@ public class PiPManager: NSObject, ObservableObject, AVPictureInPictureControlle
     ///
     /// - Parameter view: A UIView that is currently visible on screen
     public func attachActiveSourceView(_ view: UIView) {
+        // Only a new source view restarts the attempt budget. SwiftUI calls `updateUIView` on every
+        // refresh, and resetting on each call would let an off-screen anchor extend the wait forever.
+        if pendingSourceView !== view {
+            pendingSourceView = view
+            pendingAttachAttempts = 0
+        }
+        
+        attachPendingSourceViewIfPossible()
+    }
+    
+    /// Attaches the pending source view once it has a window, or schedules a bounded retry
+    ///
+    /// Callers usually hand over the view from `viewDidLoad` / `makeUIView`, before it joins a
+    /// window, so waiting is expected. The wait must stay bounded: a view that never joins a
+    /// window - a controller SwiftUI builds and discards, for instance - previously re-dispatched
+    /// this method on the main queue forever, saturating the main thread and leaking the view.
+    private func attachPendingSourceViewIfPossible() {
+        // A deallocated source view ends the wait: `pendingSourceView` is weak on purpose
+        guard let view = pendingSourceView else { return }
+        
         // Ensure we have a persistent anchor attached to window
         guard let window = view.window else {
-            DispatchQueue.main.async { [weak self] in
-                self?.attachActiveSourceView(view)
-            }
+            scheduleAttachRetry()
             return
         }
+        
+        pendingSourceView = nil
+        pendingAttachAttempts = 0
         
         let anchor: UIView
         if let existing = persistentAnchorView {
@@ -136,6 +172,23 @@ public class PiPManager: NSObject, ObservableObject, AVPictureInPictureControlle
         activeSourceView = anchor
         
         createPiPControllerIfNeeded()
+    }
+    
+    private func scheduleAttachRetry() {
+        // Coalesce retries so repeated `attachActiveSourceView` calls cannot stack up timers
+        guard !isAttachRetryScheduled else { return }
+        guard pendingAttachAttempts < Self.maxAttachAttempts else {
+            print("SwiftPiPKit: ⚠️ Source view never joined a window, giving up attaching the PiP anchor")
+            pendingSourceView = nil
+            return
+        }
+        
+        pendingAttachAttempts += 1
+        isAttachRetryScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.attachRetryInterval) { [weak self] in
+            self?.isAttachRetryScheduled = false
+            self?.attachPendingSourceViewIfPossible()
+        }
     }
     
     /// Start Picture-in-Picture mode with default content
@@ -186,7 +239,11 @@ public class PiPManager: NSObject, ObservableObject, AVPictureInPictureControlle
     
     // MARK: - Private Start PiP Implementation
     
-    private func startPiPInternal(content: @escaping () -> AnyView, preferredContentSize: CGSize?) {
+    private func startPiPInternal(
+        content: @escaping () -> AnyView,
+        preferredContentSize: CGSize?,
+        remainingAttempts: Int = PiPManager.maxStartAttempts
+    ) {
         // Update content if controller already exists
         if let videoVC = videoCallController {
             let newHost = UIHostingController(rootView: content())
@@ -212,9 +269,19 @@ public class PiPManager: NSObject, ObservableObject, AVPictureInPictureControlle
             pip.startPictureInPicture()
             print("SwiftPiPKit: 🎬 Starting PiP...")
         } else {
-            // Retry shortly after layout/visibility settles
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.startPiPInternal(content: content, preferredContentSize: preferredContentSize)
+            // Retry shortly after layout/visibility settles, but never forever: PiP stays
+            // impossible while the app is backgrounded or the anchor is off screen
+            guard remainingAttempts > 0 else {
+                print("SwiftPiPKit: ⚠️ PiP is still not possible, giving up starting it")
+                return
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.startRetryInterval) { [weak self] in
+                self?.startPiPInternal(
+                    content: content,
+                    preferredContentSize: preferredContentSize,
+                    remainingAttempts: remainingAttempts - 1
+                )
             }
         }
     }
