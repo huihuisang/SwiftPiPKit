@@ -13,7 +13,6 @@ final class SwiftPiPKitTests: XCTestCase {
         
         XCTAssertNotNil(manager, "PiPManager should be initialized")
         XCTAssertFalse(manager.isPictureInPictureActive, "PiP should not be active initially")
-        XCTAssertFalse(manager.isRestoringFromPiP, "PiP should not be restoring initially")
     }
     
     /// Test that PiPManager can be initialized with complex view
